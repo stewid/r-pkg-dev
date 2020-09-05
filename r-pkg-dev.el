@@ -1,6 +1,6 @@
 ;;; r-pkg-dev.el --- Minor mode to facilitate R package development
 
-;; Copyright (C) 2015  Stefan Widgren
+;; Copyright (C) 2015-2020  Stefan Widgren
 
 ;; Author: Stefan Widgren <stefan.widgren@gmail.com>
 ;; Keywords: R
@@ -25,17 +25,23 @@
 
 ;;; Code:
 
-(defun r-pkg-dev-package-version ()
-  "Determine package version from DESCRIPTION file."
-  (interactive)
-  (message (shell-command-to-string
-            "Rscript -e 'cat(read.dcf(\"DESCRIPTION\")[1, \"Version\"])'")))
-
 (defun r-pkg-dev-package-name ()
   "Determine package name from DESCRIPTION file."
   (interactive)
   (message (shell-command-to-string
             "Rscript -e 'cat(read.dcf(\"DESCRIPTION\")[1, \"Package\"])'")))
+
+(defun r-pkg-dev-package-title ()
+  "Determine package title from DESCRIPTION file."
+  (interactive)
+  (message (shell-command-to-string
+            "Rscript -e 'cat(read.dcf(\"DESCRIPTION\")[1, \"Title\"])'")))
+
+(defun r-pkg-dev-package-version ()
+  "Determine package version from DESCRIPTION file."
+  (interactive)
+  (message (shell-command-to-string
+            "Rscript -e 'cat(read.dcf(\"DESCRIPTION\")[1, \"Version\"])'")))
 
 (defun r-pkg-dev-package-tar ()
   (interactive)
@@ -63,7 +69,39 @@
   "Check R package."
   (interactive)
   (with-output-to-temp-buffer "*check-package*"
-    (shell-command (format "cd .. && R CMD build --no-build-vignettes %s && _R_CHECK_CRAN_INCOMING_=FALSE NOT_CRAN=true R CMD check --as-cran --no-manual --no-vignettes --no-build-vignettes %s &"
+    (shell-command (format (string-join
+                            '("cd .. &&"
+                              "R CMD build --compact-vignettes=both %s &&"
+                              "OMP_THREAD_LIMIT=2"
+                              "_R_CHECK_CRAN_INCOMING_=FALSE"
+                              "R CMD check"
+                              "--as-cran"
+                              "--no-stop-on-test-error"
+                              "--run-dontrun"
+                              "%s &")
+                            " ")
+                           (r-pkg-dev-package-name)
+                           (r-pkg-dev-package-tar))
+                   "*check-package*"
+                   "*Messages*")
+    (pop-to-buffer "*check-package*")))
+
+(defun r-pkg-dev-quick-check-package ()
+  "Quick check R package."
+  (interactive)
+  (with-output-to-temp-buffer "*check-package*"
+    (shell-command (format (string-join
+                            '("cd .. &&"
+                              "R CMD build --no-build-vignettes --no-manual %s &&"
+                              "OMP_THREAD_LIMIT=2"
+                              "_R_CHECK_CRAN_INCOMING_=FALSE"
+                              "R CMD check"
+                              "--as-cran"
+                              "--no-manual"
+                              "--no-vignettes"
+                              "--no-stop-on-test-error"
+                              "%s &")
+                            " ")
                            (r-pkg-dev-package-name)
                            (r-pkg-dev-package-tar))
                    "*check-package*"
@@ -92,15 +130,30 @@
      "-e" "roxygenize()")
     (pop-to-buffer "*roxygenize-package*")))
 
+(defhydra r-pkg-dev-menu (:color pink
+                          :hint nil)
+  "
+^Development^        ^Description^
+^^^^^^^^------------------------------
+_i_: install         _n_: name
+_c_: check           _t_: title
+_q_: quick check     _v_: version
+_r_: roxygenize
+"
+  ("i" r-pkg-dev-install-package)
+  ("c" r-pkg-dev-check-package)
+  ("q" r-pkg-dev-quick-check-package)
+  ("r" r-pkg-dev-roxygenize)
+  ("n" r-pkg-dev-package-name)
+  ("t" r-pkg-dev-package-title)
+  ("v" r-pkg-dev-package-version)
+  ("x" nil "exit"))
+
 (define-minor-mode r-pkg-dev-mode
   "Minor mode to facilitate R package development."
   :lighter " r-pkg-dev"
   :keymap (let ((map (make-sparse-keymap)))
-            (define-key map (kbd "C-c C-d n") 'r-pkg-dev-package-name)
-            (define-key map (kbd "C-c C-d c") 'r-pkg-dev-check-package)
-            (define-key map (kbd "C-c C-d i") 'r-pkg-dev-install-package)
-            (define-key map (kbd "C-c C-d r") 'r-pkg-dev-roxygenize)
-            (define-key map (kbd "C-c C-d v") 'r-pkg-dev-package-version)
+            (define-key map (kbd "C-c C-d") 'r-pkg-dev-menu/body)
             map))
 
 (provide 'r-pkg-dev)
